@@ -4,6 +4,12 @@ From here you can download the scripts to build on top of [JuNest](https://githu
 
 ---------------------------------
 
+## Debugging and improvements
+
+To improve it, extract the AppImage using the option `--appimage-extract` and follow the instructions [here](https://github.com/ivan-hc/ArchImage#troubleshooting).
+
+---------------------------------
+
 ## Install and update it with ease
 
 I wrote two bash scripts to install and manage the applications: [AM](https://github.com/ivan-hc/AM-Application-Manager) and [AppMan](https://github.com/ivan-hc/AppMan). Their dual existence is based on the needs of the end user.
