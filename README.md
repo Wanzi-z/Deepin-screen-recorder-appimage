@@ -4,6 +4,12 @@ From here you can download the scripts to build on top of [JuNest](https://githu
 
 ---------------------------------
 
+## Known issues
+
+- No audio support
+
+---------------------------------
+
 ## Debugging and improvements
 
 To improve it, extract the AppImage using the option `--appimage-extract` and follow the instructions [here](https://github.com/ivan-hc/ArchImage#troubleshooting).
