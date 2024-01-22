@@ -3,16 +3,9 @@
 # NAME OF THE APP BY REPLACING "SAMPLE"
 APP=deepin-screen-recorder
 BIN="$APP" #CHANGE THIS IF THE NAME OF THE BINARY IS DIFFERENT FROM "$APP" (for example, the binary of "obs-studio" is "obs")
-DEPENDENCES="dconf deepin-image-editor deepin-qt-dbus-factory deepin-turbo dtkcore dtkgui dtkwidget ffmpeg gcc-libs libx11 libxext libxfixes libxtst opencv portaudio"
+DEPENDENCES="ca-certificates dconf deepin-image-editor deepin-qt-dbus-factory deepin-turbo dtkcore dtkgui dtkwidget ffmpeg gcc-libs libx11 libxext libxfixes libxtst opencv portaudio"
 #BASICSTUFF="binutils gzip"
 #COMPILERS="base-devel"
-
-# ADD A VERSION, THIS IS NEEDED FOR THE NAME OF THE FINEL APPIMAGE, IF NOT AVAILABLE ON THE REPO, THE VALUE COME FROM AUR, AND VICE VERSA
-for REPO in { "core" "extra" "community" "multilib" }; do
-echo "$(wget -q https://archlinux.org/packages/$REPO/x86_64/$APP/flag/ -O - | grep $APP | grep details | head -1 | grep -o -P '(?<=/a> ).*(?= )' | grep -o '^\S*')" >> version
-done
-VERSION=$(cat ./version | grep -w -v "" | head -1)
-VERSIONAUR=$(wget -q https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=$APP -O - | grep pkgver | head -1 | cut -c 8-)
 
 # CREATE THE APPDIR (DON'T TOUCH THIS)...
 wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
@@ -46,11 +39,12 @@ Include = /etc/pacman.d/mirrorlist" >> ./.junest/etc/pacman.conf
 
 # CUSTOM MIRRORLIST, THIS SHOULD SPEEDUP THE INSTALLATION OF THE PACKAGES IN PACMAN (COMMENT EVERYTHING TO USE THE DEFAULT MIRROR)
 _custom_mirrorlist(){
-	COUNTRY=$(curl -i ipinfo.io | grep country | cut -c 15- | cut -c -2)
+	#COUNTRY=$(curl -i ipinfo.io | grep country | cut -c 15- | cut -c -2)
 	rm -R ./.junest/etc/pacman.d/mirrorlist
-	wget -q https://archlinux.org/mirrorlist/?country="$(echo $COUNTRY)" -O - | sed 's/#Server/Server/g' >> ./.junest/etc/pacman.d/mirrorlist
+	wget -q https://archlinux.org/mirrorlist/all/ -O - | awk NR==2 RS= | sed 's/#Server/Server/g' >> ./.junest/etc/pacman.d/mirrorlist # ENABLES WORLDWIDE MIRRORS
+	#wget -q https://archlinux.org/mirrorlist/?country="$(echo $COUNTRY)" -O - | sed 's/#Server/Server/g' >> ./.junest/etc/pacman.d/mirrorlist # ENABLES MIRRORS OF YOUR COUNTY
 }
-#_custom_mirrorlist
+_custom_mirrorlist
 
 # BYPASS SIGNATURE CHECK LEVEL
 sed -i 's/#SigLevel/SigLevel/g' ./.junest/etc/pacman.conf
@@ -93,6 +87,33 @@ cp -r ./.junest/usr/share/icons/hicolor/512x512/apps/*$ICON* ./ 2>/dev/null
 cp -r ./.junest/usr/share/icons/hicolor/scalable/apps/*$ICON* ./ 2>/dev/null
 cp -r ./.junest/usr/share/pixmaps/*$ICON* ./ 2>/dev/null
 
+# TEST IF THE DESKTOP FILE AND THE ICON ARE IN THE ROOT OF THE FUTURE APPIMAGE (./*AppDir/*)
+if test -f ./*.desktop; then
+	echo "The .desktop file is available in $APP.AppDir/"
+else
+	if test -f ./.junest/usr/bin/$BIN; then
+ 		echo "No .desktop file available for $APP, creating a new one..."
+ 		cat <<-HEREDOC >> "./$APP.desktop"
+		[Desktop Entry]
+		Version=1.0
+		Type=Application
+		Name=NAME
+		Comment=
+		Exec=BINARY
+		Icon=tux
+		Categories=Utility;
+		Terminal=true
+		StartupNotify=true
+		HEREDOC
+		sed -i "s#BINARY#$BIN#g" ./$APP.desktop
+		sed -i "s#Name=NAME#Name=$(echo $APP | tr a-z A-Z)#g" ./$APP.desktop
+		wget https://raw.githubusercontent.com/Portable-Linux-Apps/Portable-Linux-Apps.github.io/main/favicon.ico -O ./tux.png
+	else
+ 		echo "No binary in path... aborting all the processes."
+		exit
+	fi
+fi
+
 # ...AND FINALLY CREATE THE APPRUN, IE THE MAIN SCRIPT TO RUN THE APPIMAGE!
 # EDIT THE FOLLOWING LINES IF YOU THINK SOME ENVIRONMENT VARIABLES ARE MISSING
 rm -R -f ./AppRun
@@ -119,22 +140,22 @@ cd ..
 
 # EXTRACT PACKAGE CONTENT
 mkdir base
-tar fx $APP.AppDir/.junest/var/cache/pacman/pkg/$APP*.zst -C ./base/
-
+tar fx $(find ./$APP.AppDir -name $APP-[0-9]*zst | head -1) -C ./base/
+VERSION=$(cat ./base/.PKGINFO | grep pkgver | cut -c 10- | sed 's@.*:@@')
 mkdir deps
 
 ARGS=$(echo "$DEPENDENCES" | tr " " "\n")
 for arg in $ARGS; do
 	for var in $arg; do
- 		tar fx $APP.AppDir/.junest/var/cache/pacman/pkg/$arg*.zst -C ./deps/
-		cat ./deps/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<" > depdeps
+ 		tar fx $(find ./$APP.AppDir -name $arg-[0-9]*zst) -C ./deps/
+ 		cat ./deps/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<" > depdeps
 	done
 done
 
 DEPS=$(cat ./base/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<")
 for arg in $DEPS; do
 	for var in "$arg"; do
- 		tar fx $APP.AppDir/.junest/var/cache/pacman/pkg/"$arg"*.zst -C ./deps/
+ 		tar fx $(find ./$APP.AppDir -name $arg-[0-9]*zst) -C ./deps/
  		cat ./deps/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<" > depdeps
 	done
 done
@@ -142,7 +163,7 @@ done
 DEPS2=$(cat ./depdeps | uniq)
 for arg in $DEPS2; do
 	for var in "$arg"; do
- 		tar fx $APP.AppDir/.junest/var/cache/pacman/pkg/"$arg"*.zst -C ./deps/
+ 		tar fx $(find ./$APP.AppDir -name $arg-[0-9]*zst) -C ./deps/
  		cat ./deps/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<" > depdeps2
  	done
 done
@@ -150,7 +171,7 @@ done
 DEPS3=$(cat ./depdeps2 | uniq)
 for arg in $DEPS3; do
 	for var in "$arg"; do
- 		tar fx $APP.AppDir/.junest/var/cache/pacman/pkg/"$arg"*.zst -C ./deps/
+ 		tar fx $(find ./$APP.AppDir -name $arg-[0-9]*zst) -C ./deps/
  		cat ./deps/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<" > depdeps3
  	done
 done
@@ -158,7 +179,7 @@ done
 DEPS4=$(cat ./depdeps3 | uniq)
 for arg in $DEPS4; do
 	for var in "$arg"; do
- 		tar fx $APP.AppDir/.junest/var/cache/pacman/pkg/"$arg"*.zst -C ./deps/
+ 		tar fx $(find ./$APP.AppDir -name $arg-[0-9]*zst) -C ./deps/
  		cat ./deps/.PKGINFO | grep "depend = " | grep -v "makedepend = " | cut -c 10- | grep -v "=\|>\|<" > depdeps4
  	done
 done
@@ -176,9 +197,9 @@ rm -R -f ./$APP.AppDir/.junest/var/* #REMOVE ALL PACKAGES DOWNLOADED WITH THE PA
 # WE WILL MOVE EXCESS CONTENT TO BACKUP FOLDERS (STEP 1)
 # THE AFFECTED DIRECTORIES WILL BE /usr/bin (STEP 2), /usr/lib (STEP 3) AND /usr/share (STEP 4)
 
-BINSAVED="ff qt" # Enter here keywords to find and save in /usr/bin
-SHARESAVED="ff qt" # Enter here keywords or file/folder names to save in both /usr/share and /usr/lib
-LIBSAVED="alsa jack pipewire pulse ff qt" # Enter here keywords or file/folder names to save in /usr/lib
+BINSAVED="certificates ff qt" # Enter here keywords to find and save in /usr/bin
+SHARESAVED="certificates ff qt" # Enter here keywords or file/folder names to save in both /usr/share and /usr/lib
+LIBSAVED="pk p11 alsa jack pipewire pulse ff qt" # Enter here keywords or file/folder names to save in /usr/lib
 
 # STEP 1, CREATE A BACKUP FOLDER WHERE TO SAVE THE FILES TO BE DISCARDED (USEFUL FOR TESTING PURPOSES)
 mkdir -p ./junest-backups/usr/bin
@@ -321,9 +342,9 @@ _saveshare(){
 _saveshare 2> /dev/null
 
 # RSYNC DEPENDENCES
-#rsync -av ./deps/usr/bin/* ./$APP.AppDir/.junest/usr/bin/
-#rsync -av ./deps/usr/lib/* ./$APP.AppDir/.junest/usr/lib/
-#rsync -av ./deps/usr/share/* ./$APP.AppDir/.junest/usr/share/
+rsync -av ./deps/usr/bin/* ./$APP.AppDir/.junest/usr/bin/
+rsync -av ./deps/usr/lib/* ./$APP.AppDir/.junest/usr/lib/
+rsync -av ./deps/usr/share/* ./$APP.AppDir/.junest/usr/share/
 
 # ADDITIONAL REMOVALS
 #mv ./$APP.AppDir/.junest/usr/lib/libLLVM-* ./junest-backups/usr/lib/ #INCLUDED IN THE COMPILATION PHASE, CAN SOMETIMES BE EXCLUDED FOR DAILY USE
